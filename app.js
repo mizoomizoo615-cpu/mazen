@@ -494,23 +494,56 @@ function ocCard(o,id,tagsHtml,kvHtml,actHtml){
     '<div class="oc-tags">'+tagsHtml+'</div><div class="text">'+kvHtml+'</div><div class="oc-actions">'+actHtml+'</div></div></div></article>';
 }
 
+/* ---------- وضع عرض سجل الطلبات: شرائح / شبكي / جدولي ---------- */
+var LIST_MODE=(function(){var m='slide';try{m=localStorage.getItem('ordersListMode')||'slide';}catch(e){}return ['slide','grid','table'].indexOf(m)<0?'slide':m;})();
+function syncListMode(){
+  [].forEach.call(document.querySelectorAll('#listMode button'),function(b){b.setAttribute('aria-pressed',b.dataset.m===LIST_MODE?'true':'false');});
+}
+function setListMode(m){
+  if(['slide','grid','table'].indexOf(m)<0||m===LIST_MODE)return;
+  LIST_MODE=m;try{localStorage.setItem('ordersListMode',m);}catch(e){}
+  renderList();
+}
+/* إلغاء سلوك الشرائح (التنقل التلقائي) عند العرض الشبكي أو الجدولي */
+function ocPlain(el){
+  clearTimeout(el._t);
+  el.classList.remove('ocs','single','paused');
+  el.onclick=el.onmouseenter=el.onmouseleave=el.onfocusin=el.onfocusout=el.onchange=el.ontouchstart=el.ontouchend=null;
+  el.style.removeProperty('--dir');
+}
+
 function renderList(){
   var fs=$('fStatus').value,fb=$('fBranch').value;
   $('fStatus').innerHTML='<option value="">كل المراحل</option>'+opt(STATUS);$('fStatus').value=fs;
   var bs=[];orders.forEach(function(o){if(o.branch&&bs.indexOf(o.branch)<0)bs.push(o.branch);});
   $('fBranch').innerHTML='<option value="">كل الفروع</option>'+opt(bs);$('fBranch').value=fb;
-  var rows=filtered();
-  $('recTbl').innerHTML=rows.length?
+  var rows=filtered(),box=$('recTbl');
+  syncListMode();
+  function tagsOf(o){return '<span class="tag s'+sIdx(o.status)+'">'+esc(o.status)+'</span>'+(o.stopped?'<span class="tag s5">موقوف</span>':'')+(o.priority&&o.priority!==PRIORITY[0]?'<span class="tag s5">'+esc(o.priority)+'</span>':'');}
+  function actOf(o){return '<button class="btn sm ghost" data-a="print" data-id="'+o.id+'" type="button">طباعة</button><button class="btn sm ghost" data-a="edit" data-id="'+o.id+'" type="button">تعديل</button><button class="btn sm red" data-a="del" data-id="'+o.id+'" type="button">حذف</button>';}
+  /* وضع العرض: شرائح / شبكي / جدولي */
+  if(LIST_MODE==='table'){
+    ocPlain(box);box.classList.remove('ocards');
+    box.innerHTML=rows.length?
+      '<table class="rec otbl"><thead><tr><th>م</th><th>رقم الطلب</th><th>صورة</th><th>التاريخ</th><th>العميل</th><th>الهاتف</th><th>الفرع</th><th>موعد التسليم</th><th>المرحلة</th><th>الاعتماد</th><th>الصافي</th><th>المتبقي</th><th>إجراءات</th></tr></thead><tbody>'+
+      rows.map(function(o,i){
+        return '<tr><td>'+(i+1)+'</td><td><b>'+esc(o.orderNo)+'</b></td><td>'+(firstImg(o)||'—')+'</td><td class="num">'+esc(o.orderDate)+'</td><td>'+esc(o.custName)+'</td><td class="num">'+esc(o.phone)+'</td><td>'+esc(o.branch)+'</td>'+
+          '<td class="num'+(isLate(o)?' late':'')+'">'+esc(o.deliveryDate)+(isLate(o)?' • متأخر':'')+'</td><td>'+tagsOf(o)+'</td><td>'+esc(o.approval)+'</td>'+
+          '<td class="num">'+fmt(num(o.net))+' '+esc(o.currency)+'</td><td class="num">'+fmt(num(o.remain))+'</td><td class="act">'+actOf(o)+'</td></tr>';
+      }).join('')+'</tbody></table>'
+      :'<div class="oc-empty">لا توجد طلبات مطابقة.</div>';
+    return;
+  }
+  box.classList.add('ocards');
+  box.innerHTML=rows.length?
     rows.map(function(o,i){
-      var tags='<span class="tag s'+sIdx(o.status)+'">'+esc(o.status)+'</span>'+(o.stopped?'<span class="tag s5">موقوف</span>':'')+(o.priority&&o.priority!==PRIORITY[0]?'<span class="tag s5">'+esc(o.priority)+'</span>':'');
       var kv=ocKV('التاريخ',esc(o.orderDate))+ocKV('الهاتف',esc(o.phone))+ocKV('الفرع',esc(o.branch))+
         ocKV('موعد التسليم',esc(o.deliveryDate)+(isLate(o)?' • متأخر':''),isLate(o)?'late':'')+ocKV('الاعتماد',esc(o.approval))+
         ocKV('الصافي',fmt(num(o.net))+' '+esc(o.currency))+ocKV('المتبقي',fmt(num(o.remain)));
-      var act='<button class="btn sm ghost" data-a="print" data-id="'+o.id+'" type="button">طباعة</button><button class="btn sm ghost" data-a="edit" data-id="'+o.id+'" type="button">تعديل</button><button class="btn sm red" data-a="del" data-id="'+o.id+'" type="button">حذف</button>';
-      return ocCard(o,'ocl'+i,tags,kv,act);
+      return ocCard(o,'ocl'+i,tagsOf(o),kv,actOf(o));
     }).join('')
     :'<div class="oc-empty">لا توجد طلبات مطابقة.</div>';
-  ocSlide($('recTbl'));
+  if(LIST_MODE==='grid')ocPlain(box);else ocSlide(box);
 }
 
 /* ---------- صور الأصناف في تقارير PDF ---------- */
@@ -6988,6 +7021,7 @@ function init(){
   $('saveBtn').onclick=save;
   $('resetBtn').onclick=function(){guard(function(){editingId=null;fillForm(blank());toast('نموذج جديد');});};
   ['q','fStatus','fBranch','fLate'].forEach(function(id){$(id).addEventListener('input',renderList);});
+  $('listMode').addEventListener('click',function(e){var b=e.target.closest('button[data-m]');if(b)setListMode(b.dataset.m);});
   $('recTbl').addEventListener('click',function(e){
     var b=e.target.closest('button[data-a]');if(!b)return;
     var o=orders.find(function(x){return x.id===b.dataset.id;});if(!o)return;
