@@ -345,6 +345,17 @@ function show(v){
   refresh();
   window.scrollTo(0,0);
 }
+
+function decorateHome(){
+  var T={dash:['مؤشرات','تسليم','إحصاءات'],form:['عميل','أصناف','دفعات'],list:['بحث','تصفية','تصدير'],scope:['أبعاد','مجسم','مخطط'],cost:['مواد','تشغيل','ربحية'],cycle:['شراء','تصنيع','تسليم'],mats:['خامات','حصر','أصناف'],panel:['ألواح','قص','هالك'],mrp:['احتياج','مخزون','طلبات'],pr:['إنشاء','متابعة','استلام'],xfer:['مواد','قطع','مطابقة'],job:['مراحل','صرف','تتبّع'],cat:['أخشاب','أقمشة','إكسسوار'],gal:['صور','فيديو','اختيار']};
+  var I=['◧','◩','◪'];
+  document.querySelectorAll('#v-home .hcard[data-go]').forEach(function(c,n){
+    if(c.querySelector('.htiles'))return;
+    var t=T[c.dataset.go]||['','',''],d=document.createElement('span');d.className='htiles';
+    d.innerHTML=t.map(function(x,k){return '<span class="ht"><i>'+I[k]+'</i><em>'+x+'</em></span>';}).join('');
+    c.appendChild(d);c.classList.add('k'+(n%5));
+  });
+}
 function renderHome(){
   try{
     var M=mrp(true),O=function(o){return o.status!==STATUS[4]&&o.status!==STATUS[5];};
@@ -424,126 +435,40 @@ function firstImg(o){
   if(!src)(o.lines||[]).some(function(l){if(l.img){src=l.img;return true;}return false;});
   return src?'<img class="thumb" src="'+src+'" alt="صورة الطلب">':'';
 }
-/* ---------- بطاقات جديدة (سجل الطلبات / الدورة المستندية / مراحل التصنيع) ---------- */
-var OC_ART='<svg viewBox="0 0 120 100" aria-hidden="true" focusable="false"><rect x="22" y="12" width="76" height="46" rx="22" fill="#d9b48a"/><rect x="8" y="40" width="26" height="40" rx="13" fill="#c99763"/><rect x="86" y="40" width="26" height="40" rx="13" fill="#c99763"/><rect x="26" y="52" width="68" height="28" rx="12" fill="#e7c9a3"/><rect x="38" y="24" width="44" height="22" rx="11" fill="#f1dcc0" opacity=".75"/><rect x="30" y="80" width="6" height="14" rx="3" fill="#8a5a35"/><rect x="84" y="80" width="6" height="14" rx="3" fill="#8a5a35"/></svg>';
-/* ---------- شرائح الطلبات: تنقل تلقائي + أسهم + نقاط + سحب ---------- */
-var OCS_MS=5000;
-function ocSlide(el){
-  var cards=[].slice.call(el.querySelectorAll(':scope > .oc'));
-  if(!cards.length){el.classList.remove('ocs');return;}
-  var keep=el._i||0,n=cards.length;
-  clearTimeout(el._t);
-  el.classList.add('ocs');el._i=Math.min(keep,n-1);el._pause=false;
-  var many=n>10,dots='';
-  for(var k=0;k<(many?1:n);k++)dots+='<button type="button" class="ocs-dot" data-k="'+k+'" aria-label="الطلب '+(k+1)+'"></button>';
-  el.innerHTML='<div class="ocs-vp"><div class="ocs-track">'+cards.map(function(c){return c.outerHTML;}).join('')+'</div></div>'+
-    '<div class="ocs-nav"><button type="button" class="ocs-btn" data-d="-1" aria-label="السابق">›</button><div class="ocs-dots'+(many?' many':'')+'">'+dots+'</div>'+
-    (n>1?'<span class="ocs-count"></span>':'')+'<button type="button" class="ocs-btn" data-d="1" aria-label="التالي">‹</button></div>';
-  if(n<2)el.classList.add('single');
-  var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches;
-  function paint(){
-    var tr=el.querySelector('.ocs-track');
-    el.style.setProperty('--dir',getComputedStyle(el).direction==='rtl'?1:-1);
-    tr.style.setProperty('--i',el._i);
-    [].forEach.call(el.querySelectorAll('.oc'),function(c,j){c.classList.toggle('cur',j===el._i);c.setAttribute('aria-hidden',j===el._i?'false':'true');});
-    var ds=el.querySelectorAll('.ocs-dot');
-    [].forEach.call(ds,function(d,j){d.classList.remove('on');if(many?true:j===el._i){void d.offsetWidth;d.classList.add('on');}});
-    el.classList.toggle('paused',el._pause);
-    var ct=el.querySelector('.ocs-count');if(ct)ct.textContent=(el._i+1)+' / '+n;
-    clearTimeout(el._t);
-    if(n>1&&!el._pause&&!reduce)el._t=setTimeout(tick,OCS_MS);
-  }
-  function go(i){el._i=((i%n)+n)%n;paint();}
-  function tick(){
-    if(!el.isConnected)return;
-    if(el.offsetParent===null||document.hidden){el._t=setTimeout(tick,1000);return;}
-    go(el._i+1);
-  }
-  function setPause(v){if(el._pause===v)return;el._pause=v;paint();}
-  el.onclick=function(e){
-    var b=e.target.closest('.ocs-btn');if(b){go(el._i+(+b.dataset.d));return;}
-    var d=e.target.closest('.ocs-dot');if(d&&!many){go(+d.dataset.k);}
-  };
-  el.onmouseenter=function(){setPause(true);};
-  el.onmouseleave=function(){if(!el.querySelector('.oc>input:checked')&&!el.contains(document.activeElement))setPause(false);};
-  el.onfocusin=function(){setPause(true);};
-  el.onfocusout=function(){setTimeout(function(){if(!el.matches(':hover')&&!el.querySelector('.oc>input:checked'))setPause(false);},50);};
-  el.onchange=function(e){if(e.target.matches('.oc>input')){var open=!!el.querySelector('.oc>input:checked');if(open)setPause(true);else if(!el.matches(':hover'))setPause(false);}};
-  var x0=null;
-  el.ontouchstart=function(e){x0=e.touches[0].clientX;setPause(true);};
-  el.ontouchend=function(e){
-    if(x0!==null){var dx=e.changedTouches[0].clientX-x0;if(Math.abs(dx)>45){var rtl=getComputedStyle(el).direction==='rtl';go(el._i+(dx>0?1:-1)*(rtl?1:-1));}}
-    x0=null;setTimeout(function(){if(!el.querySelector('.oc>input:checked'))setPause(false);},4000);
-  };
-  paint();
-}
-function firstSrc(o){
+
+var SC_N=0,SC_PH='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3e6d2"/><stop offset="1" stop-color="#c99a6b"/></linearGradient></defs><rect width="260" height="260" fill="url(#g)"/><rect x="50" y="110" width="160" height="62" rx="14" fill="#8e5a34"/><rect x="62" y="82" width="136" height="42" rx="12" fill="#a8703f"/><rect x="62" y="170" width="14" height="30" rx="4" fill="#5c3a20"/><rect x="184" y="170" width="14" height="30" rx="4" fill="#5c3a20"/></svg>');
+function ordImgSrc(o){
   var src=(o.images&&o.images[0]&&o.images[0].src)||'';
   if(!src)(o.lines||[]).some(function(l){if(l.img){src=l.img;return true;}return false;});
-  return src;
+  return src||SC_PH;
 }
-function ocImg(o,id){
-  var s=firstSrc(o);
-  return s?'<label for="'+id+'" class="oc-img" title="اضغط لتكبير الصورة"><img src="'+s+'" alt="صورة الطلب" loading="lazy"></label>'
-          :'<div class="oc-img ph">'+OC_ART+'</div>';
+/* بطاقة منزلقة (نفس كود المستخدم، بأسماء محصورة .sc) : slides=[{t:عنوان,x:[[تسمية,قيمة HTML]..]}] */
+function slideCard(o,slides,acts,cls){
+  var id='sc'+(++SC_N),src=esc(ordImgSrc(o)),h='<article class="sc '+(cls||'')+'">';
+  slides.forEach(function(_,i){h+='<input type="radio" class="r'+(i+1)+'" name="'+id+'" id="'+id+'_'+(i+1)+'"'+(i===0?' checked':'')+'>';});
+  h+='<input type="checkbox" class="ex" id="'+id+'_x"><div class="sc-dots">';
+  slides.forEach(function(_,i){h+='<label class="dot d'+(i+1)+'" for="'+id+'_'+(i+1)+'" title="'+esc(slides[i].n||'')+'"></label>';});
+  h+='</div>';
+  slides.forEach(function(sl,i){
+    h+='<div class="ip ip'+(i+1)+'"><label class="sc-img" for="'+id+'_x"><img src="'+src+'" alt="صورة الطلب" loading="lazy"></label><div class="sc-body"><div class="sc-title">'+sl.t+'</div><div class="sc-text">'+
+      sl.x.map(function(r){return '<span><em>'+r[0]+'</em><b>'+r[1]+'</b></span>';}).join('')+'</div><div class="sc-act">'+acts+'</div></div></div>';
+  });
+  return h+'</article>';
 }
-function ocKV(k,v,cls){return '<div><span>'+k+'</span><b'+(cls?' class="'+cls+'"':'')+'>'+v+'</b></div>';}
-function ocCard(o,id,tagsHtml,kvHtml,actHtml){
-  return '<article class="oc"><input type="checkbox" id="'+id+'" aria-label="تكبير الصورة"><div class="oc-inner">'+ocImg(o,id)+
-    '<div class="oc-content"><div class="title">'+esc(o.orderNo)+'</div><div class="sub">'+esc(o.custName)+'</div>'+
-    '<div class="oc-tags">'+tagsHtml+'</div><div class="text">'+kvHtml+'</div><div class="oc-actions">'+actHtml+'</div></div></div></article>';
-}
-
-/* ---------- وضع عرض سجل الطلبات: شرائح / شبكي / جدولي ---------- */
-var LIST_MODE=(function(){var m='slide';try{m=localStorage.getItem('ordersListMode')||'slide';}catch(e){}return ['slide','grid','table'].indexOf(m)<0?'slide':m;})();
-function syncListMode(){
-  [].forEach.call(document.querySelectorAll('#listMode button'),function(b){b.setAttribute('aria-pressed',b.dataset.m===LIST_MODE?'true':'false');});
-}
-function setListMode(m){
-  if(['slide','grid','table'].indexOf(m)<0||m===LIST_MODE)return;
-  LIST_MODE=m;try{localStorage.setItem('ordersListMode',m);}catch(e){}
-  renderList();
-}
-/* إلغاء سلوك الشرائح (التنقل التلقائي) عند العرض الشبكي أو الجدولي */
-function ocPlain(el){
-  clearTimeout(el._t);
-  el.classList.remove('ocs','single','paused');
-  el.onclick=el.onmouseenter=el.onmouseleave=el.onfocusin=el.onfocusout=el.onchange=el.ontouchstart=el.ontouchend=null;
-  el.style.removeProperty('--dir');
-}
-
 function renderList(){
   var fs=$('fStatus').value,fb=$('fBranch').value;
   $('fStatus').innerHTML='<option value="">كل المراحل</option>'+opt(STATUS);$('fStatus').value=fs;
   var bs=[];orders.forEach(function(o){if(o.branch&&bs.indexOf(o.branch)<0)bs.push(o.branch);});
   $('fBranch').innerHTML='<option value="">كل الفروع</option>'+opt(bs);$('fBranch').value=fb;
-  var rows=filtered(),box=$('recTbl');
-  syncListMode();
-  function tagsOf(o){return '<span class="tag s'+sIdx(o.status)+'">'+esc(o.status)+'</span>'+(o.stopped?'<span class="tag s5">موقوف</span>':'')+(o.priority&&o.priority!==PRIORITY[0]?'<span class="tag s5">'+esc(o.priority)+'</span>':'');}
-  function actOf(o){return '<button class="btn sm ghost" data-a="print" data-id="'+o.id+'" type="button">طباعة</button><button class="btn sm ghost" data-a="edit" data-id="'+o.id+'" type="button">تعديل</button><button class="btn sm red" data-a="del" data-id="'+o.id+'" type="button">حذف</button>';}
-  /* وضع العرض: شرائح / شبكي / جدولي */
-  if(LIST_MODE==='table'){
-    ocPlain(box);box.classList.remove('ocards');
-    box.innerHTML=rows.length?
-      '<table class="rec otbl"><thead><tr><th>م</th><th>رقم الطلب</th><th>صورة</th><th>التاريخ</th><th>العميل</th><th>الهاتف</th><th>الفرع</th><th>موعد التسليم</th><th>المرحلة</th><th>الاعتماد</th><th>الصافي</th><th>المتبقي</th><th>إجراءات</th></tr></thead><tbody>'+
-      rows.map(function(o,i){
-        return '<tr><td>'+(i+1)+'</td><td><b>'+esc(o.orderNo)+'</b></td><td>'+(firstImg(o)||'—')+'</td><td class="num">'+esc(o.orderDate)+'</td><td>'+esc(o.custName)+'</td><td class="num">'+esc(o.phone)+'</td><td>'+esc(o.branch)+'</td>'+
-          '<td class="num'+(isLate(o)?' late':'')+'">'+esc(o.deliveryDate)+(isLate(o)?' • متأخر':'')+'</td><td>'+tagsOf(o)+'</td><td>'+esc(o.approval)+'</td>'+
-          '<td class="num">'+fmt(num(o.net))+' '+esc(o.currency)+'</td><td class="num">'+fmt(num(o.remain))+'</td><td class="act">'+actOf(o)+'</td></tr>';
-      }).join('')+'</tbody></table>'
-      :'<div class="oc-empty">لا توجد طلبات مطابقة.</div>';
-    return;
-  }
-  box.classList.add('ocards');
-  box.innerHTML=rows.length?
-    rows.map(function(o,i){
-      var kv=ocKV('التاريخ',esc(o.orderDate))+ocKV('الهاتف',esc(o.phone))+ocKV('الفرع',esc(o.branch))+
-        ocKV('موعد التسليم',esc(o.deliveryDate)+(isLate(o)?' • متأخر':''),isLate(o)?'late':'')+ocKV('الاعتماد',esc(o.approval))+
-        ocKV('الصافي',fmt(num(o.net))+' '+esc(o.currency))+ocKV('المتبقي',fmt(num(o.remain)));
-      return ocCard(o,'ocl'+i,tagsOf(o),kv,actOf(o));
-    }).join('')
-    :'<div class="oc-empty">لا توجد طلبات مطابقة.</div>';
-  if(LIST_MODE==='grid')ocPlain(box);else ocSlide(box);
+  var rows=filtered();
+  $('recTbl').innerHTML=rows.length?rows.map(function(o){
+    var late=isLate(o),acts='<button class="btn sm ghost" data-a="print" data-id="'+o.id+'" type="button">طباعة</button><button class="btn sm ghost" data-a="edit" data-id="'+o.id+'" type="button">تعديل</button><button class="btn sm red" data-a="del" data-id="'+o.id+'" type="button">حذف</button>';
+    return slideCard(o,[
+      {n:'الطلب',t:'<b>'+esc(o.orderNo)+'</b> '+(o.priority&&o.priority!==PRIORITY[0]?'<span class="tag s5">'+esc(o.priority)+'</span>':''),x:[['العميل',esc(o.custName)],['الهاتف','<span class="num">'+esc(o.phone)+'</span>'],['الفرع',esc(o.branch)]]},
+      {n:'المرحلة والمواعيد',t:'<span class="tag s'+sIdx(o.status)+'">'+esc(o.status)+'</span>'+(o.stopped?' <span class="tag s5">موقوف</span>':''),x:[['التاريخ','<span class="num">'+esc(o.orderDate)+'</span>'],['التسليم','<span class="num '+(late?'late':'')+'">'+esc(o.deliveryDate)+(late?' · متأخر':'')+'</span>'],['الاعتماد',esc(o.approval)]]},
+      {n:'المالية',t:'<span class="num">'+fmt(num(o.net))+' '+esc(o.currency)+'</span>',x:[['الصافي','<span class="num">'+fmt(num(o.net))+' '+esc(o.currency)+'</span>'],['المتبقي','<span class="num">'+fmt(num(o.remain))+'</span>']]}
+    ],acts);
+  }).join(''):'<div class="sc-empty">لا توجد طلبات مطابقة.</div>';
 }
 
 /* ---------- صور الأصناف في تقارير PDF ---------- */
@@ -920,19 +845,17 @@ function renderCycle(){
   var list=orders.filter(function(o){return !hide||(o.status!==STATUS[4]&&o.status!==STATUS[5]);})
     .sort(function(a,b){return (a.deliveryDate||'').localeCompare(b.deliveryDate||'');});
   var heads=['طلب العميل','مراجعة النطاق','عناصر التكلفة','حصر المواد','طلب الشراء','استلام الخامات','صرف للتصنيع','التصنيع','التسليم'];
-  $('cycTbl').innerHTML=list.length?
-    list.map(function(o){
+  var ICO=['📝','📐','💰','📦','🛒','🚚','🏭','🔨','✅'];
+  $('cycTbl').innerHTML=list.length?list.map(function(o,idx){
       var S=cycleOf(o,M),nx=null;
       for(var i=1;i<S.length;i++){if(S[i].s==='todo'||S[i].s==='part'){nx=S[i];break;}}
       var map={scope:['scope','مراجعة النطاق'],cost:['cost','عناصر التكلفة'],bom:['bom','حصر المواد'],mrp:['mrp','إنشاء طلب شراء'],pr:['pr','متابعة الاستلام'],issue:['job','صرف الخامات'],job:['job','مراحل التصنيع'],close:['list','سجل الطلبات']};
-      var btn=nx&&map[nx.k]?'<button class="btn sm gold" data-a="go" data-to="'+map[nx.k][0]+'" data-id="'+o.id+'" type="button">'+map[nx.k][1]+' ›</button>':'<span class="cy-done">✓ مكتمل</span>';
-      var src=firstSrc(o);
-      return '<article class="cy"><div class="cy-art">'+(src?'<img src="'+src+'" alt="" loading="lazy">':OC_ART)+'</div>'+
-        '<div class="cy-head"><b class="cy-no">'+esc(o.orderNo)+'</b><span class="cy-cust">'+esc(o.custName)+'</span><span class="cy-date'+(isLate(o)?' late':'')+'">التسليم: '+esc(o.deliveryDate)+(isLate(o)?' • متأخر':'')+'</span></div>'+
-        '<div class="cy-steps">'+S.map(function(x){return '<div class="cy-step s-'+x.s+'"><i>'+SYM[x.s]+'</i><em>'+esc(x.t)+'</em><small>'+esc(x.d)+'</small></div>';}).join('')+'</div>'+
-        '<div class="cy-act">'+btn+'</div></article>';
+      var btn=nx&&map[nx.k]?'<button class="btn sm gold" data-a="go" data-to="'+map[nx.k][0]+'" data-id="'+o.id+'" type="button">'+map[nx.k][1]+' ›</button>':'<span class="st done">مكتمل</span>';
+      var dn=S.filter(function(x){return x.s==='done';}).length;
+      return '<article class="cy c'+(idx%5)+'"><div class="cy-big" aria-hidden="true">'+ICO[Math.min(dn,8)]+'</div><h3 class="cy-t">'+esc(o.orderNo)+'</h3><p class="cy-s">'+esc(o.custName)+' · <span class="num '+(isLate(o)?'late':'')+'">'+esc(o.deliveryDate)+'</span></p>'+
+        '<div class="cy-tiles">'+S.map(function(x,k){return '<span class="cy-tile '+x.s+'" title="'+esc(heads[k]||'')+'"><i>'+SYM[x.s]+'</i><em>'+esc(heads[k]||x.d)+'</em><small>'+esc(x.d)+'</small></span>';}).join('')+'</div><div class="cy-act">'+btn+'</div></article>';
     }).join('')
-    :'<div class="oc-empty">لا توجد طلبات. سجّل طلبًا أو حمّل البيانات التجريبية من لوحة المتابعة.</div>';
+    :'<div class="sc-empty">لا توجد طلبات. سجّل طلبًا أو حمّل البيانات التجريبية من لوحة المتابعة.</div>';
 }
 function goTo(to,id){
   var o=orderBy(id);
@@ -1690,18 +1613,15 @@ function stOpts(v){return ST.map(function(s){return '<option'+(s===v?' selected'
 function renderJobs(){
   var open=orders.filter(function(o){return [STATUS[0],STATUS[1],STATUS[2],STATUS[3]].indexOf(o.status)>-1;})
     .sort(function(a,b){return (a.deliveryDate||'').localeCompare(b.deliveryDate||'');});
-  $('jobTbl').innerHTML=open.length?
-    open.map(function(o,i){
-      var p=orderProg(o),j=jobs[o.id];
-      var tags='<span class="tag s'+sIdx(o.status)+'">'+esc(o.status)+'</span>'+(o.stopped?'<span class="tag s5">موقوف</span>':'')+
-        (j&&j.issued?'<span class="st done">✓ خامات مصروفة</span>':'<span class="st todo">○ لم تُصرف</span>');
-      var kv=ocKV('موعد التسليم',esc(o.deliveryDate)+(isLate(o)?' • متأخر':''),isLate(o)?'late':'')+
-        '<div class="wide"><span>التقدم</span><b>'+p+'%</b><span class="prog"><i style="width:'+p+'%"></i></span></div>';
-      var act='<button class="btn sm gold" data-a="openjob" data-id="'+o.id+'" type="button">بطاقة التصنيع</button><button class="btn sm ghost" data-a="jobrowpdf" data-id="'+o.id+'" type="button">PDF</button>';
-      return ocCard(o,'ocj'+i,tags,kv,act);
-    }).join('')
-    :'<div class="oc-empty">لا توجد طلبات تحت التصنيع.</div>';
-  ocSlide($('jobTbl'));
+  $('jobTbl').innerHTML=open.length?open.map(function(o){
+    var p=orderProg(o),j=jobs[o.id],late=isLate(o),
+    acts='<button class="btn sm gold" data-a="openjob" data-id="'+o.id+'" type="button">بطاقة التصنيع</button><button class="btn sm ghost" data-a="jobrowpdf" data-id="'+o.id+'" type="button">PDF</button>';
+    return slideCard(o,[
+      {n:'الطلب',t:'<b>'+esc(o.orderNo)+'</b>',x:[['العميل',esc(o.custName)],['التسليم','<span class="num '+(late?'late':'')+'">'+esc(o.deliveryDate)+(late?' · متأخر':'')+'</span>']]},
+      {n:'التقدم',t:'<span class="num">'+p+'%</span>',x:[['التقدم','<span class="prog"><i style="width:'+p+'%"></i></span>'],['المرحلة','<span class="tag s'+sIdx(o.status)+'">'+esc(o.status)+'</span>'+(o.stopped?' <span class="tag s5">موقوف</span>':'')]]},
+      {n:'الخامات',t:(j&&j.issued?'<span class="st done">✓ مصروفة</span>':'<span class="st todo">○ لم تُصرف</span>'),x:[['الطلب',esc(o.orderNo)],['التقدم','<span class="num">'+p+'%</span>']]}
+    ],acts,'job');
+  }).join(''):'<div class="sc-empty">لا توجد طلبات تحت التصنيع.</div>';
   var cnt={};
   open.forEach(function(o){var j=jobs[o.id];if(!j)return;jobUnits(j).forEach(function(lj){lj.stages.forEach(function(s){if(s.state===ST[1])cnt[s.name]=(cnt[s.name]||0)+1;});});});
   bars($('jobLoad'),Object.keys(cnt).map(function(k){return [k,cnt[k]];}),function(){return 's2';});
@@ -7021,7 +6941,6 @@ function init(){
   $('saveBtn').onclick=save;
   $('resetBtn').onclick=function(){guard(function(){editingId=null;fillForm(blank());toast('نموذج جديد');});};
   ['q','fStatus','fBranch','fLate'].forEach(function(id){$(id).addEventListener('input',renderList);});
-  $('listMode').addEventListener('click',function(e){var b=e.target.closest('button[data-m]');if(b)setListMode(b.dataset.m);});
   $('recTbl').addEventListener('click',function(e){
     var b=e.target.closest('button[data-a]');if(!b)return;
     var o=orders.find(function(x){return x.id===b.dataset.id;});if(!o)return;
@@ -7746,5 +7665,6 @@ function vdOpen(o){
   VD.raf=requestAnimationFrame(vdTick);
 }
 
+decorateHome();
 init();
 })();
