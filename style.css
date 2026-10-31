@@ -1,3 +1,4 @@
+
 /* ===== block 1 ===== */
 :root{
   --navy:#8e1c1f; --navy2:#6c1214; --gold:#c99a3b; --gold-l:#f5dcaa; --red:#c62828; --teal:#1f7673;
@@ -1342,3 +1343,5 @@ div.pimg{height:176px!important;background:linear-gradient(145deg,#f7e6d6,#e9cdb
 /* ===== block 8 (print report images: prevent catalog .pimg tile rules from stretching them) ===== */
 .sheet img.pimg{width:64px;height:64px;object-fit:cover;background:none;flex:none}
 @media print{.sheet img.pimg{width:64px;height:64px;max-width:none}}
+
+
