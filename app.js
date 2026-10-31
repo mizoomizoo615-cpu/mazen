@@ -1,3 +1,4 @@
+
 (function(){
 'use strict';
 
@@ -2623,7 +2624,70 @@ function defSecs(t,L,r){
   if(t===FT[10])return [{k:'drawers',w:'',n:Math.max(1,r.drawers||2),m:''}];
   return [{k:'shelves',w:'',n:Math.max(1,(r.shelves||4)-1),m:''}];
 }
-function getSecs(d,t,L,r){return (d.secs&&d.secs.length)?d.secs:defSecs(t,L,r);}
+/* ===== اتجاه فتح الأبواب (لكل باب على حدة) ===== */
+var DSML={mid:'من المنتصف للخارج (الافتراضي)',R:'كل الأبواب تفتح لليمين',L:'كل الأبواب تفتح لليسار',altR:'بالتناوب: الأول يمين والثاني يسار وهكذا',altL:'بالتناوب: الأول يسار والثاني يمين وهكذا',custom:'مخصص — أحدد اتجاه كل باب'};
+function doorSides(m,l,n){
+  var a=[],k,sd;
+  for(k=0;k<n;k++){
+    if(m==='R')sd='R';
+    else if(m==='L')sd='L';
+    else if(m==='altR')sd=(k%2===0)?'R':'L';
+    else if(m==='altL')sd=(k%2===0)?'L':'R';
+    else if(m==='custom'&&l&&l[k])sd=(l[k]==='R')?'R':'L';
+    else sd=(k<n/2)?'L':'R';
+    a.push(sd);
+  }
+  return a;
+}
+function dsDesc(d,n){
+  var m=d.dsm||'mid';
+  if(m==='mid')return '';
+  var sd=doorSides(m,d.dsl,n||(d.dsl?d.dsl.length:0));
+  if(m==='custom'||sd.length)return (m==='custom'?'':DSML[m]+' — ')+sd.map(function(x,i){return 'باب '+(i+1)+': '+(x==='R'?'يمين':'يسار');}).join('، ');
+  return DSML[m]||'';
+}
+/* ===== التقسيم الداخلي حسب الأبواب (كل تقسيم يشمل باب أو أكثر) ===== */
+var BAYT=[['tpHS','رف علوي + عمود شماعة | عمود رفوف (مثل الصورة)'],['tpSH','رف علوي + عمود رفوف | عمود شماعة'],['tpHSD','رف علوي + شماعة | رفوف وأدراج أسفل'],['tpH','رف علوي + شماعة كاملة'],['tpS','رفوف كاملة'],['tpH2','شماعتان علوية وسفلية'],['tpSD','رفوف + أدراج أسفل'],['tpD','أدراج فقط']];
+function bayMake(id){
+  function P(p,n){return {p:p,n:n,h:''};}
+  var T=function(h){return {on:true,h:h||40,n:0};};
+  if(id==='tpHS')return {top:T(),cols:[{f:1,parts:[P('hang',1)]},{f:1,parts:[P('shelves',3)]}]};
+  if(id==='tpSH')return {top:T(),cols:[{f:1,parts:[P('shelves',3)]},{f:1,parts:[P('hang',1)]}]};
+  if(id==='tpHSD')return {top:T(),cols:[{f:1,parts:[P('hang',1)]},{f:1,parts:[P('shelves',2),P('drawers',2)]}]};
+  if(id==='tpH')return {top:T(),cols:[{f:1,parts:[P('hang',1)]}]};
+  if(id==='tpS')return {top:{on:false,h:40,n:0},cols:[{f:1,parts:[P('shelves',4)]}]};
+  if(id==='tpH2')return {top:{on:false,h:40,n:0},cols:[{f:1,parts:[P('hang',1),P('hang',1)]}]};
+  if(id==='tpSD')return {top:{on:false,h:40,n:0},cols:[{f:1,parts:[P('shelves',3),P('drawers',2)]}]};
+  if(id==='tpD')return {top:{on:false,h:40,n:0},cols:[{f:1,parts:[P('drawers',4)]}]};
+  return null;
+}
+function bayNew(span,tpl){var m=bayMake(tpl)||bayMake('tpS');return {span:span,tpl:tpl,top:m.top,cols:m.cols};}
+function bayAuto(n,per){
+  var a=[],left=Math.max(1,n),i=0;
+  while(left>0){var sp=Math.min(per,left);a.push(bayNew(sp,sp>=2?'tpHS':(i%2===0?'tpH':'tpS')));left-=sp;i++;}
+  return a;
+}
+function baysToSecs(d){
+  return d.bays.map(function(by){
+    var sp=Math.max(1,parseInt(by.span,10)||1);
+    return {k:'bay',w:sp,rel:1,span:sp,top:by.top,cols:(by.cols&&by.cols.length)?by.cols:[{f:1,parts:[]}]};
+  });
+}
+function bayColW(cols,wd,tk){
+  var nc=cols.length,av=wd-tk*(nc-1),tot=0,fs=cols.map(function(c){var f=parseFloat(c.f);f=(f>0)?f:1;tot+=f;return f;});
+  return fs.map(function(f){return av*f/tot;});
+}
+function bayTop(sc,vb,vt,tk){
+  var tp=sc.top;
+  if(!tp||!tp.on)return {has:0,h:0,vcol:vt};
+  var h=parseFloat(tp.h);if(!(h>0))h=40;
+  h=Math.min(h,(vt-vb)*0.5);
+  return {has:1,h:h,vcol:vt-h-tk};
+}
+function getSecs(d,t,L,r){
+  if(t===FT[1]&&d.bays&&d.bays.length)return baysToSecs(d);
+  return (d.secs&&d.secs.length)?d.secs:defSecs(t,L,r);
+}
 function secTk(L,H){return Math.max(0.8,Math.min(1.8,L*0.02,H*0.02));}
 /* تقسيم مخصص داخل الفتحة الواحدة: أجزاء مرتبة من الأعلى إلى الأسفل (رفوف / شماعة / أدراج / فراغ) */
 function mixLayout(parts,vb,vt,tk){
@@ -2658,11 +2722,11 @@ function secLayout(secs,L,H){
   var given=0,blanks=0,raw=secs.map(function(x){var w=parseFloat(x.w);if(x.w===''||x.w==null||isNaN(w)||w<=0){blanks++;return null;}given+=w;return w;});
   var ws,note='';
   if(blanks>0&&avail-given>=5*blanks){var bw=(avail-given)/blanks;ws=raw.map(function(w){return w==null?bw:w;});}
-  else if(blanks===0&&Math.abs(given-avail)<=0.6)ws=raw;
+  else if(blanks===0&&!secs.every(function(x){return x.rel;})&&Math.abs(given-avail)<=0.6)ws=raw;
   else{
     var rr=raw.map(function(w){return w==null?avail/n:w;}),tot=rr.reduce(function(a,b){return a+b;},0);
     ws=rr.map(function(w){return w*avail/tot;});
-    note='مجموع عروض الأقسام لا يطابق العرض الداخلي المتاح ('+fmt(r1(avail))+' سم بعد خصم سماكة الألواح)، لذلك عُدّلت العروض نسبيًا في الرسم.';
+    note=secs.every(function(x){return x.rel;})?'':'مجموع عروض الأقسام لا يطابق العرض الداخلي المتاح ('+fmt(r1(avail))+' سم بعد خصم سماكة الألواح)، لذلك عُدّلت العروض نسبيًا في الرسم.';
   }
   return {tk:tk,ws:ws,note:note,avail:avail};
 }
@@ -2676,8 +2740,12 @@ function secDesc(secs,lay){
     else if(k==='drawers'){n=ci(sc.n,3,12);dr+=n;txt=n+' أدراج';}
     else if(k==='combo'){n=ci(sc.n,3,30);m=ci(sc.m,2,10);sh+=n;dr+=m;txt=n+' رفوف + '+m+' أدراج سفلية';}
     else if(k==='mix'){var ps=sc.parts||[];txt='تقسيم مخصص من الأعلى: '+(ps.length?ps.map(mixPartTxt).join(' + '):'فارغ');ps.forEach(function(p){if(p.p==='shelves')sh+=ci(p.n,2,30);else if(p.p==='drawers')dr+=ci(p.n,2,12);});}
+    else if(k==='bay'){
+      var cl2=sc.cols||[],tn2=(sc.top&&sc.top.on)?ci(sc.top.n,0,6):0;sh+=tn2;
+      txt='يشمل '+(sc.span>1?(sc.span===2?'بابين':sc.span+' أبواب'):'باب واحد')+': '+((sc.top&&sc.top.on)?'حيز علوي بعرض التقسيم'+(tn2?' ('+tn2+' رفوف)':'')+' + ':'')+cl2.map(function(c,j){var ps=c.parts||[];ps.forEach(function(p){if(p.p==='shelves')sh+=ci(p.n,2,30);else if(p.p==='drawers')dr+=ci(p.n,2,12);});return 'عمود '+(j+1)+' ['+(ps.length?ps.map(mixPartTxt).join(' + '):'فارغ')+']';}).join(' | ');
+    }
     else txt='فراغ';
-    return 'القسم '+(i+1)+' ('+fmt(r1(lay.ws[i]))+' سم): '+txt;
+    return (k==='bay'?'التقسيم ':'القسم ')+(i+1)+' ('+fmt(r1(lay.ws[i]))+' سم): '+txt;
   });
   return parts.join(' — ')+' — الإجمالي: '+sh+' رفوف'+(dr?' و'+dr+' أدراج':'');
 }
@@ -2712,6 +2780,17 @@ function interiorSvg(t,L,H,secs,lay,sf){
     var uc=u0+wd/2;
     return rect(u0+0.4,v+0.3,wd-0.8,dh-0.6,'#efd49c')+ln(uc-4,v+dh/2,uc+4,v+dh/2,2)+((dh*s>=11&&wd*s>=26)?tx(u0+wd/2,v+dh*0.22,fmt(r1(dh)),8):'');
   }
+  function mixRun(u0,wd,vb2,vt2,parts){
+    var ml2=mixLayout(parts||[],vb2,vt2,tk);
+    ml2.forEach(function(q,qi){
+      var nn2,dh2,j2,rd2;
+      if(q.p==='shelves')o+=shelvesRun(u0,wd,q.vlo,q.vhi,ci(q.n,2,30));
+      else if(q.p==='hang'){rd2=q.vhi-6;o+=rod(u0,wd,rd2)+gapLbl(u0,wd,q.vlo,rd2-10);}
+      else if(q.p==='drawers'){nn2=ci(q.n,2,12);dh2=(q.vhi-q.vlo)/Math.max(nn2,1);for(j2=0;j2<nn2;j2++)o+=drawerRect(u0,wd,q.vlo+j2*dh2,dh2);}
+      else o+=tx(u0+wd/2,(q.vlo+q.vhi)/2,'فراغ',9);
+      if(qi<ml2.length-1)o+=rect(u0,q.vlo-tk,wd,tk,WD);
+    });
+  }
   o+=rect(0,0,L,H,WD,1.5)+rect(tk,vb,L-2*tk,hh,'#fbf3df',0.8);
   var u=tk,n=secs.length;
   secs.forEach(function(sc,i){
@@ -2741,6 +2820,14 @@ function interiorSvg(t,L,H,secs,lay,sf){
         else if(q.p==='drawers'){nn=ci(q.n,2,12);dh=(q.vhi-q.vlo)/Math.max(nn,1);for(j=0;j<nn;j++)o+=drawerRect(u0,wd,q.vlo+j*dh,dh);}
         else o+=tx(u0+wd/2,(q.vlo+q.vhi)/2,'فراغ',9);
         if(qi<ml.length-1)o+=rect(u0,q.vlo-tk,wd,tk,WD);
+      });
+    }else if(k==='bay'){
+      var bt=bayTop(sc,vb,vt,tk),cls=sc.cols||[],cw=bayColW(cls,wd,tk),cu=u0,tn=(sc.top&&sc.top.on)?ci(sc.top.n,0,6):0;
+      if(bt.has){o+=rect(u0,bt.vcol,wd,tk,WD);o+=tn?shelvesRun(u0,wd,vt-bt.h,vt,tn):gapLbl(u0,wd,vt-bt.h,vt);}
+      cls.forEach(function(cl,cj){
+        mixRun(cu,cw[cj],vb,bt.vcol,cl.parts);
+        if(cj<cls.length-1)o+=rect(cu+cw[cj],vb,tk,bt.vcol-vb,WD);
+        cu+=cw[cj]+tk;
       });
     }else o+=tx(u0+wd/2,(vb+vt)/2,'فراغ',10);
     o+=tx(u0+wd/2,H+4,'قسم '+(i+1),9.5,'middle','#8e1c1f');
@@ -2779,7 +2866,109 @@ function mixEditor(k,i,sc){
     }).join('')+
     '<button class="btn ghost sm" type="button" data-a="mixadd" data-sk="'+k+'" data-si="'+i+'">+ إضافة جزء (رفوف / شماعة / أدراج / فراغ)</button></div>';
 }
+function scDoorN(d,name){var t=ftype(d,name);return fdef(t,d,num(d.l)).doors;}
+function doorEditor(k,d,name){
+  if(!fvTypeDoors(d,name))return '';
+  var t=ftype(d,name),n=scDoorN(d,name);
+  if(n<1)return '';
+  if((t===FT[1]||t===FT[3])&&d.dt==='slide'&&n>1)return '<div style="margin-top:12px"><b>اتجاه فتح الأبواب</b> <span class="hint">— الأبواب الجرّارة تنزلق على سكّة ولا يُحدَّد لها اتجاه مفصلات. غيّر «نوع أبواب الدولاب» إلى مفصلي لتحديد اتجاه كل باب.</span></div>';
+  var m=d.dsm||'mid',sd=doorSides(m,d.dsl,n);
+  var h='<div class="dsw" style="margin-top:12px"><b>طريقة فتح الأبواب</b> <span class="hint">— الأبواب مرقمة من اليسار إلى اليمين كما في الرسم، والاتجاه هو الجهة التي ينفتح نحوها الباب (كما تراه وأنت أمام الدولاب)</span>'+
+    '<div class="bar" style="margin-top:6px"><label style="display:inline-flex;align-items:center;gap:6px;font-weight:600">النمط <select data-ds="mode" data-dsk="'+k+'" style="width:auto;min-height:34px">'+
+    Object.keys(DSML).map(function(x){return '<option value="'+x+'"'+(x===m?' selected':'')+'>'+DSML[x]+'</option>';}).join('')+'</select></label></div>'+
+    '<div class="bar" style="gap:6px;margin-top:6px;flex-wrap:wrap">'+
+    sd.map(function(x,i){return '<button type="button" class="btn ghost sm" data-a="dstog" data-sk="'+k+'" data-i="'+i+'" title="اضغط لعكس اتجاه هذا الباب" style="min-width:104px">باب '+(i+1)+': '+(x==='R'?'يمين ▶':'◀ يسار')+'</button>';}).join('')+
+    '</div><span class="hint">اضغط على أي باب لعكس اتجاهه (يتحول النمط تلقائيًا إلى «مخصص»).</span></div>';
+  return h;
+}
+function bayPartRows(k,bi,cj,parts){
+  return parts.map(function(p,pi){
+    var a='data-bk="'+k+'" data-bi="'+bi+'" data-bc="'+cj+'" data-bp="'+pi+'"',kd=p.p||'shelves',nPh=kd==='drawers'?'عدد الأدراج':'عدد الرفوف';
+    return '<div class="bar" style="gap:6px;margin:4px 0;align-items:center"><span style="min-width:48px">جزء '+(pi+1)+'</span>'+
+      '<select '+a+' data-bf="pp" style="width:150px" aria-label="نوع الجزء">'+MIXK.map(function(x){return '<option value="'+x[0]+'"'+(x[0]===kd?' selected':'')+'>'+x[1]+'</option>';}).join('')+'</select>'+
+      ((kd==='hang'||kd==='empty')?'':'<input type="number" min="0" step="1" '+a+' data-bf="pn" placeholder="'+nPh+'" style="width:105px" value="'+esc(p.n==null?'':p.n)+'" aria-label="'+nPh+'">')+
+      '<input type="number" min="0" step="any" '+a+' data-bf="ph" placeholder="الارتفاع سم (تلقائي)" style="width:140px" value="'+esc(p.h==null?'':p.h)+'" aria-label="ارتفاع الجزء">'+
+      '<button class="btn ghost sm" type="button" data-a="bypup" data-sk="'+k+'" data-bi="'+bi+'" data-bc="'+cj+'" data-bp="'+pi+'" aria-label="للأعلى">↑</button>'+
+      '<button class="btn ghost sm" type="button" data-a="bypdn" data-sk="'+k+'" data-bi="'+bi+'" data-bc="'+cj+'" data-bp="'+pi+'" aria-label="للأسفل">↓</button>'+
+      '<button class="btn sm red" type="button" data-a="bypdel" data-sk="'+k+'" data-bi="'+bi+'" data-bc="'+cj+'" data-bp="'+pi+'" aria-label="حذف الجزء">×</button></div>';
+  }).join('');
+}
+function bayEditor(k,d,name){
+  var n=scDoorN(d,name),h='<div class="bayed" style="margin-top:12px"><b>التقسيم الداخلي حسب الأبواب</b> <span class="hint">— حدّد عدد الأبواب، ثم لكل تقسيم داخلي اختر هل يشمل بابًا واحدًا أو بابين، واختر القالب المناسب (مثل: حيز علوي + شماعة وأرفف) ثم عدّل أي تفصيلة</span>';
+  h+='<div class="bar" style="gap:6px;margin:6px 0;flex-wrap:wrap;align-items:center"><span>عدد الأبواب:</span>';
+  [1,2,3,4,5,6,7,8].forEach(function(x){h+='<button type="button" class="btn '+(x===n?'gold':'ghost')+' sm" data-a="bydoors" data-sk="'+k+'" data-n="'+x+'" style="min-width:36px">'+x+'</button>';});
+  h+='<span class="hint">(أو غيّرها من خانة «عدد الأبواب» أعلاه)</span></div>';
+  if(!d.bays||!d.bays.length){
+    return h+'<p class="hint">التقسيم الحالي تلقائي أو عبر الأقسام العامة أدناه. ابدأ تقسيمًا مخصصًا ليشمل كل تقسيمٍ بابًا أو بابين.</p><div class="bar"><button class="btn gold sm" type="button" data-a="byauto2" data-sk="'+k+'">🧩 تقسيم مخصص — كل بابين تقسيم</button><button class="btn ghost sm" type="button" data-a="byauto1" data-sk="'+k+'">تقسيم لكل باب</button></div></div>';
+  }
+  var cov=0,start=0;
+  d.bays.forEach(function(by,bi){
+    var sp=Math.max(1,parseInt(by.span,10)||1),a='data-bk="'+k+'" data-bi="'+bi+'"',tp=by.top||{on:false,h:40,n:0},cls=by.cols||[];
+    var from=start+1,to=start+sp;start+=sp;cov+=sp;
+    h+='<div class="baycard" style="border:1px dashed var(--gold);border-radius:12px;padding:8px 12px;margin:8px 0;background:#fffdf8">'+
+      '<div class="bar" style="gap:8px;align-items:center;flex-wrap:wrap"><b>تقسيم '+(bi+1)+' — '+(sp>1?'الأبواب '+from+' إلى '+to:'الباب '+from)+'</b>'+
+      '<label style="display:inline-flex;align-items:center;gap:6px">يشمل <select '+a+' data-bf="span" style="width:auto;min-height:34px">'+[1,2,3,4].concat(sp>4?[sp]:[]).map(function(x){return '<option value="'+x+'"'+(x===sp?' selected':'')+'>'+(x===1?'باب واحد':x===2?'بابين':x+' أبواب')+'</option>';}).join('')+'</select></label>'+
+      '<label style="display:inline-flex;align-items:center;gap:6px">قالب جاهز <select '+a+' data-bf="tpl" style="width:auto;max-width:260px;min-height:34px"><option value="">— اختر لإعادة التعبئة —</option>'+BAYT.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>';}).join('')+'</select></label>'+
+      '<button class="btn sm red" type="button" data-a="bydel" data-sk="'+k+'" data-bi="'+bi+'" aria-label="حذف التقسيم">× حذف</button></div>'+
+      '<div class="bar" style="gap:8px;margin:6px 0;align-items:center;flex-wrap:wrap"><label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" '+a+' data-bf="topon"'+(tp.on?' checked':'')+'> حيز علوي (رف للوسائد/البطاطين) بعرض التقسيم كله</label>'+
+      (tp.on?'<input type="number" min="0" step="any" '+a+' data-bf="toph" placeholder="ارتفاعه سم (40)" style="width:130px" value="'+esc(tp.h==null?'':tp.h)+'" aria-label="ارتفاع الحيز العلوي"><input type="number" min="0" step="1" '+a+' data-bf="topn" placeholder="رفوف داخله (0)" style="width:120px" value="'+esc(tp.n==null?'':tp.n)+'" aria-label="رفوف داخل الحيز العلوي">':'')+'</div>';
+    cls.forEach(function(cl,cj){
+      var ca=a+' data-bc="'+cj+'"';
+      h+='<div style="margin:6px 0;padding:6px 10px;border:1px solid #e4d3a8;border-radius:10px"><div class="bar" style="gap:8px;align-items:center;flex-wrap:wrap"><b>عمود '+(cj+1)+'</b> <span class="hint">(من اليسار)</span>'+
+        '<input type="number" min="0" step="any" '+ca+' data-bf="cf" placeholder="عرض نسبي (1)" style="width:120px" value="'+esc(cl.f==null?'':cl.f)+'" aria-label="العرض النسبي للعمود">'+
+        (cls.length>1?'<button class="btn sm red" type="button" data-a="bycoldel" data-sk="'+k+'" data-bi="'+bi+'" data-bc="'+cj+'" aria-label="حذف العمود">× حذف العمود</button>':'')+'</div>'+
+        bayPartRows(k,bi,cj,cl.parts||[])+
+        '<button class="btn ghost sm" type="button" data-a="bypadd" data-sk="'+k+'" data-bi="'+bi+'" data-bc="'+cj+'">+ إضافة جزء (رفوف / شماعة / أدراج / فراغ)</button></div>';
+    });
+    h+='<button class="btn ghost sm" type="button" data-a="bycoladd" data-sk="'+k+'" data-bi="'+bi+'">+ إضافة عمود (تقسيم رأسي داخل هذا التقسيم)</button></div>';
+  });
+  if(cov!==n)h+='<p class="hint" style="color:#b3261e;font-weight:700">⚠ التقسيمات تغطي '+cov+' من '+n+' أبواب. عدّل «يشمل» أو أضف تقسيمًا أو اضغط «توزيع تلقائي» ليتطابق العدد (سيُرسم المقطع الداخلي نسبيًا على أي حال).</p>';
+  return h+'<div class="bar" style="margin-top:6px"><button class="btn ghost sm" type="button" data-a="byadd" data-sk="'+k+'">+ إضافة تقسيم</button><button class="btn gold sm" type="button" data-a="byauto2" data-sk="'+k+'">توزيع تلقائي (كل بابين)</button><button class="btn ghost sm" type="button" data-a="byauto1" data-sk="'+k+'">تقسيم لكل باب</button><button class="btn ghost sm" type="button" data-a="byclr" data-sk="'+k+'">إلغاء التقسيم المخصص</button></div></div>';
+}
 function secEditor(k,d,name){
+  var t=ftype(d,name);if(!hasInt(t))return '';
+  if(t!==FT[1])return secEditor0(k,d,name);
+  var be=bayEditor(k,d,name);
+  return (d.bays&&d.bays.length)?be:be+secEditor0(k,d,name);
+}
+function bayItem(t,ds){var dd=getScope(scOrderId).items[t.dataset.bk];return dd&&dd.bays&&dd.bays[+t.dataset.bi]?{dd:dd,by:dd.bays[+t.dataset.bi]}:null;}
+function bayApply(t){
+  var r=bayItem(t);if(!r)return false;
+  var by=r.by,f=t.dataset.bf,v=(t.type==='checkbox')?t.checked:t.value,c=by.cols&&by.cols[+t.dataset.bc],p=c&&c.parts&&c.parts[+t.dataset.bp],tp;
+  if(f==='span')by.span=Math.max(1,parseInt(v,10)||1);
+  else if(f==='tpl'){var m=bayMake(v);if(m){by.tpl=v;by.top=m.top;by.cols=m.cols;}}
+  else if(f==='topon'){tp=by.top||(by.top={on:false,h:40,n:0});tp.on=!!v;}
+  else if(f==='toph'){tp=by.top||(by.top={on:true,h:40,n:0});tp.h=v;}
+  else if(f==='topn'){tp=by.top||(by.top={on:true,h:40,n:0});tp.n=v;}
+  else if(f==='cf'&&c)c.f=v;
+  else if(f==='pp'&&p)p.p=v;
+  else if(f==='pn'&&p)p.n=v;
+  else if(f==='ph'&&p)p.h=v;
+  return true;
+}
+function bayAct(ac,b,o){
+  var sk=b.dataset.sk,dd=getScope(o.id).items[sk],bx=$('scBody').querySelector('.fv3[data-sk="'+sk+'"]');
+  if(!dd||!bx)return;
+  var n=scDoorN(dd,bx.dataset.nm),bi=+b.dataset.bi,cj=+b.dataset.bc,pi=+b.dataset.bp,by=dd.bays&&dd.bays[bi],cl=by&&by.cols&&by.cols[cj],tm;
+  if(ac==='dstog'){
+    var sd=doorSides(dd.dsm||'mid',dd.dsl,n),i=+b.dataset.i;
+    sd[i]=(sd[i]==='R')?'L':'R';dd.dsl=sd;dd.dsm='custom';
+  }
+  else if(ac==='bydoors'){dd.doors=+b.dataset.n;if(dd.dsm==='custom'&&dd.dsl)dd.dsl=doorSides('custom',dd.dsl,+b.dataset.n);}
+  else if(ac==='byauto2')dd.bays=bayAuto(n,2);
+  else if(ac==='byauto1')dd.bays=bayAuto(n,1);
+  else if(ac==='byclr')dd.bays=[];
+  else if(ac==='byadd'){dd.bays=dd.bays||[];dd.bays.push(bayNew(1,'tpS'));}
+  else if(ac==='bydel'&&dd.bays)dd.bays.splice(bi,1);
+  else if(ac==='bycoladd'&&by){by.cols=by.cols||[];by.cols.push({f:1,parts:[{p:'shelves',n:3,h:''}]});}
+  else if(ac==='bycoldel'&&by&&by.cols&&by.cols.length>1)by.cols.splice(cj,1);
+  else if(ac==='bypadd'&&cl){cl.parts=cl.parts||[];cl.parts.push({p:'shelves',n:2,h:''});}
+  else if(ac==='bypdel'&&cl&&cl.parts)cl.parts.splice(pi,1);
+  else if(ac==='bypup'&&cl&&cl.parts&&pi>0){tm=cl.parts[pi];cl.parts[pi]=cl.parts[pi-1];cl.parts[pi-1]=tm;}
+  else if(ac==='bypdn'&&cl&&cl.parts&&pi<cl.parts.length-1){tm=cl.parts[pi];cl.parts[pi]=cl.parts[pi+1];cl.parts[pi+1]=tm;}
+  var yy=window.scrollY;renderScope();window.scrollTo(0,yy);schedSave();
+}
+function secEditor0(k,d,name){
   var t=ftype(d,name);if(!hasInt(t))return '';
   var h='<div style="margin-top:12px"><b>التقسيم الداخلي</b> <span class="hint">— الأقسام مرتبة من اليسار إلى اليمين كما في رسم المقطع الداخلي، وترك العرض فارغًا يوزّع المتبقي بالتساوي</span>';
   if(!d.secs||!d.secs.length){
@@ -2851,7 +3040,7 @@ function renderScope(){
       '<div class="grid">'+f('l','الطول (سم)')+f('w','العرض (سم)')+f('h','الارتفاع (سم)')+
       '<div class="wide"><label>نوع الأثاث (يحدد شكل المجسم)</label><select data-sk="'+k+'" data-k="type">'+FT.map(function(x){return '<option'+(x===ftype(d,u.name)?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>'+
       g('doors','عدد الأبواب')+g('drawers','عدد الأدراج')+g('shelves','أرفف / وسائد')+
-      '<div class="wide"><label>ملاحظات (سماكة، فتحات، تفاصيل)</label><input data-sk="'+k+'" data-k="note" value="'+esc(d.note)+'"></div></div>'+secEditor(k,d,u.name)+catSlots(k,d)+galSlots(k,d)+
+      '<div class="wide"><label>ملاحظات (سماكة، فتحات، تفاصيل)</label><input data-sk="'+k+'" data-k="note" value="'+esc(d.note)+'"></div></div>'+doorEditor(k,d,u.name)+secEditor(k,d,u.name)+catSlots(k,d)+galSlots(k,d)+
       '<div class="fv3" data-sk="'+k+'" data-nm="'+esc(u.name)+'" data-col="'+esc(u.p&&u.p.color||'')+'"></div>'+
       (us.length>1?'<div class="scnav">'+
         '<button type="button" class="btn ghost" data-a="scnav" data-d="-1"'+(sKeys.indexOf(k)===0?' disabled':'')+'>› الصنف السابق</button>'+
@@ -2865,7 +3054,7 @@ function renderScope(){
 }
 function secPrint(d,u){
   var t=ftype(d,u.name),L=num(d.l),W=num(d.w),H=num(d.h);
-  if(!(L>0&&W>0&&H>0)||!hasInt(t)||!d.secs||!d.secs.length)return '';
+  if(!(L>0&&W>0&&H>0)||!hasInt(t)||!((d.secs&&d.secs.length)||(d.bays&&d.bays.length)))return '';
   var r=fdef(t,d,L),secs=getSecs(d,t,L,r),lay=secLayout(secs,L,H);if(!lay)return '';
   return '<table class="kv"><tr><td>التقسيم الداخلي (من اليسار)</td><td colspan="5">'+esc(secDesc(secs,lay))+(lay.note?'<br>'+esc(lay.note):'')+'</td></tr></table>'+
     '<div style="text-align:center;margin:6px 0">'+interiorSvg(t,L,H,secs,lay,d.sf)+'</div>';
@@ -4532,13 +4721,13 @@ function fvGlassDoor(a,xs,y,zb,w,hh,dt,rot,C){
 function fvDoors(a,x0,L,y,z0,z1,n,open,C){
   if(n<1||z1-z0<4)return;
   if(C.dt==='slide'&&n>1){fvSlideDoors(a,x0,L,y,z0,z1,n,open,C);return;}
-  var dw=L/n,dt=1.8,k,gs=-1,ge=-2;
+  var dw=L/n,dt=1.8,k,gs=-1,ge=-2,ds=doorSides(C.dsm,C.dsl,n);
   if(C.gt){
     var gn=Math.min(n,Math.max(1,C.gn));
     if(C.gp==='all'){gs=0;ge=n-1;}else if(C.gp==='left'){gs=0;ge=gn-1;}else if(C.gp==='right'){gs=n-gn;ge=n-1;}else{gs=Math.floor((n-gn)/2);ge=gs+gn-1;}
   }
   for(k=0;k<n;k++){
-    var left=k<n/2,hx=x0+(left?k*dw:(k+1)*dw),rot=[{hx:hx,hy:y,a:(left?-1:1)*open*1.8}];
+    var left=ds[k]==='L',hx=x0+(left?k*dw:(k+1)*dw),rot=[{hx:hx,hy:y,a:(left?-1:1)*open*1.8}];
     var xs=left?hx+0.15:hx-dw+0.15,hgt=z1-z0;
     if(k>=gs&&k<=ge){fvGlassDoor(a,xs,y,z0+0.15,dw-0.3,hgt-0.3,dt,rot,C);continue;}
     fvB(a,xs,y-dt,z0+0.15,dw-0.3,dt,hgt-0.3,C.w,{rot:rot,lay:2});
@@ -4577,6 +4766,16 @@ function fvClothes(a,u0,wd,rd,vb,W,maxH,seed){
     var ch=Math.min(rd-vb-4,maxH*(0.7+fvRnd(seed+k)*0.3)),col=fvMix(FVBOOK[Math.floor(fvRnd(seed+k*2)*FVBOOK.length)],[200,200,200],0.25);
     fvB(a,u0+(k+0.5)*wd/cnt-1.5,W*0.42-9,rd-ch,3,Math.min(W*0.6,40),ch-2,col);
   }
+}
+function fvMixRun(a,u0,wd,vlo,vhi,parts,tk,y0,iw,W,dep,sl,C,seed){
+  var ml=mixLayout(parts||[],vlo,vhi,tk);
+  ml.forEach(function(q,qi){
+    var nq,dq,jj;
+    if(q.p==='shelves')fvShelves(a,u0,wd,q.vlo,q.vhi,ci(q.n,2,30),tk,y0,iw,C,false,seed+qi*5);
+    else if(q.p==='hang'){var rq=q.vhi-6;fvB(a,u0+0.8,W*0.42-1,rq-1,wd-1.6,2,2,C.rd);fvClothes(a,u0,wd,rq,q.vlo,W,Math.min(105,rq-q.vlo-2),seed+qi);}
+    else if(q.p==='drawers'){nq=ci(q.n,2,12);dq=(q.vhi-q.vlo)/Math.max(nq,1);for(jj=0;jj<nq;jj++)fvDrawer(a,u0,0,q.vlo+jj*dq,wd,dep,dq,sl,C);}
+    if(qi<ml.length-1)fvB(a,u0,y0,q.vlo-tk,wd,iw,tk,C.wi);
+  });
 }
 function fvCab(a,L,W,H,o,C,open){
   var secs=o.secs||[{k:'shelves',n:3}],tk=secTk(L,H),base=o.base||0,bk=Math.min(1,W*0.04),lay=secLayout(secs,L,H),i;
@@ -4620,6 +4819,15 @@ function fvCab(a,L,W,H,o,C,open){
         else if(q.p==='hang'){var rq=q.vhi-6;fvB(a,u0+0.8,W*0.42-1,rq-1,wd-1.6,2,2,C.rd);fvClothes(a,u0,wd,rq,q.vlo,W,Math.min(105,rq-q.vlo-2),u0+qi);}
         else if(q.p==='drawers'){nq=ci(q.n,2,12);dq=(q.vhi-q.vlo)/Math.max(nq,1);for(jj=0;jj<nq;jj++)fvDrawer(a,u0,0,q.vlo+jj*dq,wd,dep,dq,sl,C);}
         if(qi<ml.length-1)fvB(a,u0,y0,q.vlo-tk,wd,iw,tk,C.wi);
+      });
+    }
+    if(k==='bay'){
+      var bt=bayTop(sc,vb,vt,tk),cls=sc.cols||[],cw=bayColW(cls,wd,tk),cu=u0,tn=(sc.top&&sc.top.on)?ci(sc.top.n,0,6):0;
+      if(bt.has){fvB(a,u0,y0,bt.vcol,wd,iw,tk,C.wi);if(tn>0)fvShelves(a,u0,wd,vt-bt.h,vt,tn,tk,y0,iw,C,false,u0+3);}
+      cls.forEach(function(cl,cj){
+        fvMixRun(a,cu,cw[cj],vb,bt.vcol,cl.parts,tk,y0,iw,W,dep,sl,C,u0+cj*11+i);
+        if(cj<cls.length-1)fvB(a,cu+cw[cj],0,vb,tk,W-bk,bt.vcol-vb,C.w);
+        cu+=cw[cj]+tk;
       });
     }
     if(i<n-1)fvB(a,u0+wd,0,vb,tk,W-bk,hh,C.w);
@@ -4734,7 +4942,7 @@ function fvBuild(S,st){
   var oo=st.o||{},cz=oo.cz||{},gl=oo.gl||{},hdc=fvHex(cz.handle),drc=fvHex(cz.drawer),bsc=fvHex(cz.base);
   var C={w:F,wi:fvMix(F,[255,255,255],0.16),dk:fvSh(F,0.7),mt:hdc||[182,146,76],rd:[182,146,76],dw:drc||F,dwi:fvMix(drc||F,[255,255,255],0.16),bs:bsc||hdc||fvSh(F,0.7),fr:bsc||[38,36,38],hs:oo.hs||'v',gt:gl.t||'',gp:gl.pos||'mid',gn:parseInt(gl.n,10)||2,gl:[176,218,230],fa:((st.set&&(t===FT[7]||t===FT[8]))?fvSh(F,1.05):[200,206,212]),ma:[240,238,232],pl:[252,252,250],tv:[26,28,32]};
   C.mir=oo.mir||'rect';C.ns=oo.ns||'rect';C.bst=oo.bst||'legs';C.hbs=oo.hbs||'flat';C.hbd=oo.hbd||'none';C.hbn=parseInt(oo.hbn,10)||3;C.ups=oo.ups||'none';C.up=fvHex(oo.upc)||[196,182,168];C.dl=oo.dl||'std';C.dsd=oo.dsd||'r';C.dax=oo.dax||'none';C.dxs=oo.dxs||'l';C.dst=oo.dst||'none';C.sf=(oo.sf&&oo.sf.on&&(t===FT[1]||t===FT[3]))?oo.sf:null;C.dt=(t===FT[1]||t===FT[3])?(oo.dt||'swing'):'swing';
-  var lt0=oo.lt||{};C.gd=lt0.gd||{};C.LC=lt0.on?{c:fvHex(lt0.c)||[255,208,138],p:lt0.p||[]}:null;
+  C.dsm=oo.dsm||'mid';C.dsl=oo.dsl||null;var lt0=oo.lt||{};C.gd=lt0.gd||{};C.LC=lt0.on?{c:fvHex(lt0.c)||[255,208,138],p:lt0.p||[]}:null;
   if(t===FT[0])fvB(a,0,0,0,L,W,H,C.w);
   else if(t===FT[1])fvWardrobe(a,L,W,H,S.secs,r,C,open);
   else if(t===FT[2])fvBed(a,L,W,H,C);
@@ -5430,6 +5638,7 @@ function czPrint(d){
   if(d.dst&&d.dst!=='none')rows.push(['مقعد التسريحة',DSTL[d.dst]||'']);
   if(d.sf&&d.sf.on)rows.push(['خزنة سرية داخل الدولاب',(SFSZ[d.sf.size||'m']||'')+' — '+(SFPL[d.sf.pos||'back']||'')+' — في القسم رقم '+esc(d.sf.sec||1)+' — '+(SFLK[d.sf.lock||'digital']||'')]);
   if(d.dt)rows.push(['نوع أبواب الدولاب',DTL[d.dt]||'']);
+  if(d.dsm&&d.dsm!=='mid'&&d.dt!=='slide'){var dsx=dsDesc(d,(d.dsl&&d.dsl.length)?d.dsl.length:fdef(FT[1],d,num(d.l)).doors);if(dsx)rows.push(['اتجاه فتح الأبواب',dsx]);}
   if(d.lt&&d.lt.on&&(d.lt.p||[]).indexOf('gd')>-1){var gd0=d.lt.gd||{},go=gd0.o==='v'?'v':'h';rows.push(['إضاءة الزجاج',GDO[go]+' — '+(GDP[go][gd0.p]||GDP[go][go==='v'?'sides':'both'])]);}
   if(d.lt&&d.lt.on)rows.push(['الإضاءة',(fvHex(d.lt.c)?sw(d.lt.c):'')+' — '+((d.lt.p||[]).map(function(k){return LTPL[k]||'';}).join('، '))+' — الشدة '+esc(d.lt.i||80)+'%'+(d.lt.nt===false?'':' — معروضة بوضع الليل')]);
   if(!rows.length)return '';
@@ -6578,6 +6787,8 @@ function initNew(){
     var sc=getScope(scOrderId);
     if(t.dataset.pl!==undefined){planInput(t);return;}
     if(t.dataset.pcap!==undefined){var pp0=sc.pano&&sc.pano[+t.dataset.pcap];if(pp0){pp0.cap=t.value;schedSave();}return;}
+    if(t.dataset.bf!==undefined){if(t.tagName==='SELECT'||t.type==='checkbox')return;if(bayApply(t)){fvRedraw(t.dataset.bk);schedSave();}return;}
+    if(t.dataset.ds!==undefined)return;
     if(t.dataset.sec!==undefined){
       var dd=sc.items[t.dataset.sec];
       if(dd&&dd.secs&&dd.secs[+t.dataset.si]){
@@ -6598,7 +6809,21 @@ function initNew(){
     var t=e.target;if(!scOrderId)return;
     if(t.dataset.pl!==undefined)return;
     if(t.dataset.pmode!==undefined){var pp1=getScope(scOrderId).pano&&getScope(scOrderId).pano[+t.dataset.pmode];if(pp1){pp1.mode=t.value;var y2=window.scrollY;renderScope();window.scrollTo(0,y2);schedSave();}return;}
-    if((t.dataset.sec!==undefined&&(t.dataset.sf==='k'||t.dataset.sf==='p'))||t.dataset.k==='type'){var yy0=window.scrollY;renderScope();window.scrollTo(0,yy0);}
+    if(t.dataset.bf!==undefined){
+      if(t.tagName==='SELECT'||t.type==='checkbox'){if(bayApply(t)){var yb=window.scrollY;renderScope();window.scrollTo(0,yb);schedSave();}}
+      return;
+    }
+    if(t.dataset.ds==='mode'){
+      var ddm=getScope(scOrderId).items[t.dataset.dsk],bxm=$('scBody').querySelector('.fv3[data-sk="'+t.dataset.dsk+'"]');
+      if(ddm&&bxm){
+        var nm=scDoorN(ddm,bxm.dataset.nm);
+        if(t.value==='custom'&&!(ddm.dsl&&ddm.dsl.length))ddm.dsl=doorSides(ddm.dsm||'mid',ddm.dsl,nm);
+        ddm.dsm=t.value;
+        var ym=window.scrollY;renderScope();window.scrollTo(0,ym);schedSave();
+      }
+      return;
+    }
+    if((t.dataset.sec!==undefined&&(t.dataset.sf==='k'||t.dataset.sf==='p'))||t.dataset.k==='type'||t.dataset.k==='doors'){var yy0=window.scrollY;renderScope();window.scrollTo(0,yy0);}
     if(t.dataset.o==='status'){var sc=getScope(scOrderId);if(t.value===SCS[2]&&!sc.date)sc.date=today();renderScope();}
     renderCycle();
   });
@@ -6618,6 +6843,7 @@ function initNew(){
     if(ac.slice(0,4)==='plan'){planAct(o,b);return;}
     if(ac==='galpick'||ac==='galrm'||ac==='galview'||ac==='galshare'){galScopeAct(o,b);return;}
     if(ac==='catpick'||ac==='catrm'||ac==='xsadd'||ac==='xsdel'){catScopeAct(o,b);return;}
+    if(ac==='dstog'||ac==='bydoors'||ac==='byauto1'||ac==='byauto2'||ac==='byclr'||ac==='byadd'||ac==='bydel'||ac==='bycoladd'||ac==='bycoldel'||ac==='bypadd'||ac==='bypdel'||ac==='bypup'||ac==='bypdn'){bayAct(ac,b,o);return;}
     if(ac==='secadd'||ac==='secdel'||ac==='secdef'||ac==='secclr'||ac==='secmix'||ac==='secmixnew'||ac==='mixadd'||ac==='mixdel'||ac==='mixup'||ac==='mixdn'){
       var dd=getScope(o.id).items[b.dataset.sk],bx=$('scBody').querySelector('.fv3[data-sk="'+b.dataset.sk+'"]');
       if(!dd||!bx)return;
